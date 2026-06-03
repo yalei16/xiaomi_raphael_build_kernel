@@ -3,6 +3,8 @@ set -e  # 遇到错误立即退出
 
 # 克隆指定版本的内核源码
 rm -rf ./*.deb
+rm -rf ./linux-upstream*
+
 git config --global user.name "gavin liu"
 git config --global user.email "1824306327@163.com"
 
