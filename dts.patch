@@ -29,7 +29,7 @@
 +		pins = "gpio141";
 +		function = "gpio";
 +		drive-strength = <2>; /* 2 MA */
-+		slew-rate = <1>
++		slew-rate = <1>;
 +		bias-pull-up;
 +		input-enable;
 +	};
@@ -47,7 +47,7 @@
 +		pins = "gpio59";
 +		function = "gpio";
 +		drive-strength = <2>;
-+		slew-rate = <1>
++		slew-rate = <1>;
 +		bias-disable;
 +		bias-pull-down;
 +		output-low;
