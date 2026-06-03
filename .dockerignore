@@ -1,8 +1,0 @@
-# 避免将 linux/ 内核源码目录发送给 Docker daemon（构建上下文）
-linux/
-.git/
-.github/
-*.swp
-*.swo
-.DS_Store
-Thumbs.db

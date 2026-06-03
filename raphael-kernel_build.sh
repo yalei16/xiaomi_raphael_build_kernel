@@ -53,12 +53,13 @@ else
     fi
 fi
 
-# 应用 builddeb 补丁
+# 应用补丁
 patch linux/scripts/package/builddeb < builddeb.patch
 patch linux/arch/arm64/boot/dts/qcom/sm8150-xiaomi-raphael.dts < dts.patch
+patch linux/scripts/package/mkdebian < mkdebian.patch
 cd linux
 git add .
-git commit -m "builddeb: Add Qcom SM8150 DTBs to boot partition"
+git commit -m "patches: builddeb dts mkdebian"
 
 # 生成内核配置
 cp ../raphael.config arch/arm64/configs/
@@ -81,8 +82,6 @@ if [ -n "$HEADERS_DEB" ]; then
   mv "$HEADERS_DEB" linux-headers-xiaomi-raphael.deb
 fi
 
-#清理多余 deb
-rm -rf ./*arm64*.deb
 # 清理源码目录
 # rm -rf linux
 
@@ -90,5 +89,15 @@ rm -rf ./*arm64*.deb
 dpkg-deb --build --root-owner-group firmware-xiaomi-raphael
 dpkg-deb --build --root-owner-group alsa-xiaomi-raphael
 
-# 降低 deb 包权限，方便外部项目 curl 下载使用
-chmod 644 ./*.deb
+# 创建 output 目录并移动最终 4 个 deb 包
+mkdir -p output
+mv -f linux-image-xiaomi-raphael.deb output/ 2>/dev/null || true
+mv -f linux-headers-xiaomi-raphael.deb output/ 2>/dev/null || true
+mv -f firmware-xiaomi-raphael.deb output/ 2>/dev/null || true
+mv -f alsa-xiaomi-raphael.deb output/ 2>/dev/null || true
+
+rm -rf ./*.deb
+rm -rf ./linux-upstream*
+
+# 降低 deb 包权限
+chmod 644 output/*.deb 2>/dev/null
