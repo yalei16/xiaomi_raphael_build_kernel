@@ -52,7 +52,7 @@ index 4ffeac7ad..085361f8b 100644
  		reset-gpios = <&tlmm 6 GPIO_ACTIVE_LOW>;
  		
 +		power-on-delay-us = <10000>;
-+        reset-delay-us = <10000>;
++       reset-delay-us = <10000>;
 +
  		pinctrl-names = "default", "sleep";
  		pinctrl-0 = <&panel_reset_pin &panel_te_pin>;
@@ -124,14 +124,14 @@ index 4ffeac7ad..085361f8b 100644
 +
 +&remoteproc_mpss {
 +	status = "okay";
-+	firmware-name = "qcom/sm8150/Xiaomi/raphael/modem.mbn";
-+    qcom,mba-firmware-name = "qcom/sm8150/Xiaomi/raphael/mba.mbn"; 
-+    mboxes = <&apss_shared 12>;
-+    qcom,smem-states = <&modem_smp2p_out 0>;
-+    qcom,smem-state-names = "stop";
-+    // 以下属性启用 MHI 功能（如果内核驱动支持）
-+    qcom,use-pil;
-+    qcom,is-loadable;
++	firmware-name = "qcom/sm8150/Xiaomi/raphael/modem.mdt";
++    
++   
++   
++   
++   
++   
++   
 +	required-opps = <&rpmhpd_opp_turbo>;
 +};
 +

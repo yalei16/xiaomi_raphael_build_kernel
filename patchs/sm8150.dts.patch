@@ -20,7 +20,7 @@ index 079e2f0a6..131a0d8b5 100644
  					#address-cells = <1>;
  					#size-cells = <0>;
 +					memory-region = <&fastrpc_mem>;
-+					qcom,vmids = <QCOM_SCM_VMID_SSC_Q6>;
++					qcom,vmids = <QCOM_SCM_VMID_HLOS QCOM_SCM_VMID_MSS_MSA QCOM_SCM_VMID_SSC_Q6 QCOM_SCM_VMID_ADSP_Q6>;
  
  					compute-cb@1 {
  						compatible = "qcom,fastrpc-compute-cb";
@@ -28,7 +28,7 @@ index 079e2f0a6..131a0d8b5 100644
  					qcom,non-secure-domain;
  					#address-cells = <1>;
  					#size-cells = <0>;
-+					memory-region = <&fastrpc_mem>;
++					
  
  					compute-cb@1 {
  						compatible = "qcom,fastrpc-compute-cb";
@@ -36,7 +36,7 @@ index 079e2f0a6..131a0d8b5 100644
  					qcom,non-secure-domain;
  					#address-cells = <1>;
  					#size-cells = <0>;
-+					memory-region = <&fastrpc_mem>;
++					
  
  					compute-cb@3 {
  						compatible = "qcom,fastrpc-compute-cb";
