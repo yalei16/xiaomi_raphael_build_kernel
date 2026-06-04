@@ -1,8 +1,16 @@
 diff --git a/arch/arm64/boot/dts/qcom/sm8150-xiaomi-raphael.dts b/arch/arm64/boot/dts/qcom/sm8150-xiaomi-raphael.dts
-index 4ffeac7ad..267938107 100644
+index 4ffeac7ad..085361f8b 100644
 --- a/arch/arm64/boot/dts/qcom/sm8150-xiaomi-raphael.dts
 +++ b/arch/arm64/boot/dts/qcom/sm8150-xiaomi-raphael.dts
-@@ -175,6 +175,7 @@ cont_splash_mem: memory@9c000000 {
+@@ -32,6 +32,7 @@
+ /delete-node/ &gpu_mem;     /* same size, shifted higher */
+ /delete-node/ &spss_mem;    /* same size, shifted higher */
+ /delete-node/ &cdsp_mem;    /* same size, shifted higher */
++/delete-node/ &fastrpc_mem; /* defined in board */
+ 
+ / {
+ 	model = "Xiaomi Redmi K20 Pro";
+@@ -175,6 +176,7 @@ cont_splash_mem: memory@9c000000 {
  			no-map;
  		};
  
@@ -10,7 +18,7 @@ index 4ffeac7ad..267938107 100644
  		cdsp_sec_mem: memory@a4c00000 {
  			reg = <0x0 0xa4c00000 0x0 0x3c00000>;
  			no-map;
-@@ -199,6 +200,11 @@ rmtfs_mem: memory@fe101000 {
+@@ -199,6 +201,11 @@ rmtfs_mem: memory@fe101000 {
  			qcom,client-id = <1>;
  			qcom,vmid = <15>;
  		};
@@ -22,7 +30,7 @@ index 4ffeac7ad..267938107 100644
  	};
  
  	/*
-@@ -573,6 +579,7 @@ &gmu {
+@@ -573,6 +580,7 @@ &gmu {
  
  &gpu {
  	status = "okay";
@@ -30,7 +38,16 @@ index 4ffeac7ad..267938107 100644
  };
  
  &gpu_zap_shader {
-@@ -617,6 +624,9 @@ panel:	panel@0 {
+@@ -598,7 +606,7 @@ &ipa {
+ 	status = "okay";
+ 	qcom,gsi-loader = "self";
+ 	memory-region = <&ipa_fw_mem>;
+-	firmware-name = "qcom/sm8150/Xiaomi/raphael/ipa_fws.mbn";
++	firmware-name = "qcom/sm8150/Xiaomi/raphael/ipa_fws.mdt";
+ };
+ 
+ &mdss_dsi0 {
+@@ -617,6 +625,9 @@ panel:	panel@0 {
  
  		reset-gpios = <&tlmm 6 GPIO_ACTIVE_LOW>;
  		
@@ -40,7 +57,7 @@ index 4ffeac7ad..267938107 100644
  		pinctrl-names = "default", "sleep";
  		pinctrl-0 = <&panel_reset_pin &panel_te_pin>;
  
-@@ -791,26 +801,6 @@ &qupv3_id_2 {
+@@ -791,26 +802,6 @@ &qupv3_id_2 {
  	status = "okay";
  };
  
@@ -67,7 +84,7 @@ index 4ffeac7ad..267938107 100644
  &tlmm {
      gpio-line-names = 
          "NFC_ESE_SPI_MISO",     /* GPIO_0 */
-@@ -1149,6 +1139,7 @@ &ufs_mem_phy {
+@@ -1149,6 +1140,7 @@ &ufs_mem_phy {
  &usb_1 {
  	qcom,select-utmi-as-pipe-clk;
  	status = "okay";
@@ -75,7 +92,7 @@ index 4ffeac7ad..267938107 100644
  };
  
  &usb_1_dwc3 {
-@@ -1157,6 +1148,7 @@ &usb_1_dwc3 {
+@@ -1157,6 +1149,7 @@ &usb_1_dwc3 {
  	/* Remove USB3 phy */
  	phys = <&usb_1_hsphy>;
  	phy-names = "usb2-phy";
@@ -83,13 +100,13 @@ index 4ffeac7ad..267938107 100644
  };
  
  &usb_1_dwc3_hs {
-@@ -1181,3 +1173,83 @@ &wifi {
+@@ -1181,3 +1174,83 @@ &wifi {
  
  	status = "okay";
  };
 +&remoteproc_slpi {
 +	status = "okay";
-+	firmware-name = "qcom/sm8150/Xiaomi/raphael/slpi.mbn";
++	firmware-name = "qcom/sm8150/Xiaomi/raphael/slpi_rp.mdt";
 +	required-opps = <&rpmhpd_opp_turbo>;
 +};
 +
