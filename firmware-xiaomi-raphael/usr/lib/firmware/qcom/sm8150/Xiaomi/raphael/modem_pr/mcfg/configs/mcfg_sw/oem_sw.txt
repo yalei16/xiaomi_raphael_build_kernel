@@ -77,7 +77,6 @@ mcfg_sw/generic/eu/vodafone/volte/turkey/mcfg_sw.mbn
 mcfg_sw/generic/eu/vodafone/volte/uk/mcfg_sw.mbn
 mcfg_sw/generic/eu/vodafone/lab/ctc/mcfg_sw.mbn
 mcfg_sw/generic/eu/vodafone/volte/greece/mcfg_sw.mbn
-mcfg_sw/generic/eu/vodafone/volte/romania/mcfg_sw.mbn
 mcfg_sw/generic/eu/wind/commerci/greece/mcfg_sw.mbn
 mcfg_sw/generic/korea/kt/commerci/mcfg_sw.mbn
 mcfg_sw/generic/korea/lgu/commerci/mcfg_sw.mbn
