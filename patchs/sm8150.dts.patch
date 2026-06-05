@@ -1,5 +1,5 @@
 diff --git a/arch/arm64/boot/dts/qcom/sm8150.dtsi b/arch/arm64/boot/dts/qcom/sm8150.dtsi
-index 079e2f0a6..131a0d8b5 100644
+index 079e2f0a6..279df34e7 100644
 --- a/arch/arm64/boot/dts/qcom/sm8150.dtsi
 +++ b/arch/arm64/boot/dts/qcom/sm8150.dtsi
 @@ -794,6 +794,12 @@ qseecom_mem: memory@9e400000 {
@@ -15,15 +15,35 @@ index 079e2f0a6..131a0d8b5 100644
  	};
  
  	smem {
-@@ -2279,6 +2285,8 @@ fastrpc {
+@@ -2279,23 +2285,25 @@ fastrpc {
  					qcom,non-secure-domain;
  					#address-cells = <1>;
  					#size-cells = <0>;
-+					memory-region = <&fastrpc_mem>;
-+					qcom,vmids = <QCOM_SCM_VMID_HLOS QCOM_SCM_VMID_MSS_MSA QCOM_SCM_VMID_SSC_Q6 QCOM_SCM_VMID_ADSP_Q6>;
++					memory-region = <&fastrpc_mem>;  
++					qcom,vmids = <0x3 0xf 0x5 0x6>;  
  
  					compute-cb@1 {
  						compatible = "qcom,fastrpc-compute-cb";
+ 						reg = <1>;
+-						iommus = <&apps_smmu 0x05a1 0x0>;
++						iommus = <&apps_smmu 0x04c1 0x0>;
+ 					};
+ 
+ 					compute-cb@2 {
+ 						compatible = "qcom,fastrpc-compute-cb";
+ 						reg = <2>;
+-						iommus = <&apps_smmu 0x05a2 0x0>;
++						iommus = <&apps_smmu 0x04c2 0x0>;
+ 					};
+ 
+ 					compute-cb@3 {
+ 						compatible = "qcom,fastrpc-compute-cb";
+ 						reg = <3>;
+-						iommus = <&apps_smmu 0x05a3 0x0>;
++						iommus = <&apps_smmu 0x04c3 0x0>;
+ 						/* note: shared-cb = <4> in downstream */
+ 					};
+ 				};
 @@ -3455,6 +3463,7 @@ fastrpc {
  					qcom,non-secure-domain;
  					#address-cells = <1>;

@@ -1,5 +1,5 @@
 diff --git a/arch/arm64/boot/dts/qcom/sm8150-xiaomi-raphael.dts b/arch/arm64/boot/dts/qcom/sm8150-xiaomi-raphael.dts
-index 4ffeac7ad..085361f8b 100644
+index 4ffeac7ad..472f0a154 100644
 --- a/arch/arm64/boot/dts/qcom/sm8150-xiaomi-raphael.dts
 +++ b/arch/arm64/boot/dts/qcom/sm8150-xiaomi-raphael.dts
 @@ -32,6 +32,7 @@
@@ -23,7 +23,7 @@ index 4ffeac7ad..085361f8b 100644
  			qcom,vmid = <15>;
  		};
 +
-+		fastrpc_mem: memory@ae800000 {
++		fastrpc_mem: memory@ae800000 { compatible = "shared-dma-pool"; 
 +			reg = <0x0 0xae800000 0x0 0x2000000>;
 +			no-map;
 +		};
@@ -38,9 +38,12 @@ index 4ffeac7ad..085361f8b 100644
  };
  
  &gpu_zap_shader {
-@@ -598,7 +606,7 @@ &ipa {
+@@ -596,9 +604,9 @@ goodix@5d {
+ 
+ &ipa {
  	status = "okay";
- 	qcom,gsi-loader = "self";
+-	qcom,gsi-loader = "self";
++	qcom,gsi-loader = "modem";
  	memory-region = <&ipa_fw_mem>;
 -	firmware-name = "qcom/sm8150/Xiaomi/raphael/ipa_fws.mbn";
 +	firmware-name = "qcom/sm8150/Xiaomi/raphael/ipa_fws.mdt";
@@ -77,14 +80,30 @@ index 4ffeac7ad..085361f8b 100644
 -};
 -
 -&remoteproc_slpi {
--	status = "okay";
+-	status = "disabled";
 -	firmware-name = "qcom/sm8150/Xiaomi/raphael/slpi.mbn";
 -};
 -
  &tlmm {
      gpio-line-names = 
          "NFC_ESE_SPI_MISO",     /* GPIO_0 */
-@@ -1149,6 +1140,7 @@ &ufs_mem_phy {
+@@ -1099,6 +1090,15 @@ tp_reset_suspend: tp_reset_suspend {
+         slew-rate = <1>;
+         bias-disable;
+         output-high;
++    };
++
++	    /* 新增：TFA9874 复位引脚配置 */
++    tfa9874_reset: tfa9874-reset-state {
++        pins = "gpio59";
++        function = "gpio";
++        drive-strength = <16>; slew-rate = <1>;
++        output-high;          /* 拉高，释放复位 */
++        bias-disable;
+     };
+ };
+ 
+@@ -1149,6 +1149,7 @@ &ufs_mem_phy {
  &usb_1 {
  	qcom,select-utmi-as-pipe-clk;
  	status = "okay";
@@ -92,7 +111,7 @@ index 4ffeac7ad..085361f8b 100644
  };
  
  &usb_1_dwc3 {
-@@ -1157,6 +1149,7 @@ &usb_1_dwc3 {
+@@ -1157,6 +1158,7 @@ &usb_1_dwc3 {
  	/* Remove USB3 phy */
  	phys = <&usb_1_hsphy>;
  	phy-names = "usb2-phy";
@@ -100,7 +119,7 @@ index 4ffeac7ad..085361f8b 100644
  };
  
  &usb_1_dwc3_hs {
-@@ -1181,3 +1174,83 @@ &wifi {
+@@ -1181,3 +1183,83 @@ &wifi {
  
  	status = "okay";
  };
@@ -125,30 +144,30 @@ index 4ffeac7ad..085361f8b 100644
 +&remoteproc_mpss {
 +	status = "okay";
 +	firmware-name = "qcom/sm8150/Xiaomi/raphael/modem.mdt";
-+    
++       required-opps = <&rpmhpd_opp_turbo>;
++};   
++&q6afedai {   
++   qi2s@16 {
++       reg = <16>; /* PRIMARY_MI2S_RX */
++       qcom,sd-lines = <0 1>;
++   };
 +   
-+   
-+   
-+   
-+   
-+   
-+	required-opps = <&rpmhpd_opp_turbo>;
 +};
-+
 +&q6asmdai{
-+	dai@0 {
-+		compatible = "qcom,q6afe-dai";
++	dai@0 { 
 +		reg = <0>;
-+		direction = <2>;
++	};	
++	
++                
++	
++};	
 +
-+	};
-+};
-+
++&qupv3_id_0{status = "okay";};
 +&i2c1 {
 +    status = "okay";
-+    clock-frequency = <400000>;
-+    pinctrl-names = "default";
-+    pinctrl-0 = <&qup_i2c1_default>;
++    
++    
++    
 +
 +    tfa9874: audio-codec@34 {
 +        compatible = "nxp,tfa9874";
@@ -158,8 +177,8 @@ index 4ffeac7ad..085361f8b 100644
 +        vddd-supply = <&vreg_l7a_1p8>;   
 +        vdda-supply = <&vreg_l10c_3p3>; 
 +        reset-gpios = <&tlmm 59 GPIO_ACTIVE_HIGH>;
-+        
-+        firmware-name = "tfa9874.cnt";
++        interrupt-parent = <&tlmm>;
++        interrupts = <141 IRQ_TYPE_LEVEL_LOW>;
 +        status = "okay";
 +    };
 + };
@@ -167,17 +186,17 @@ index 4ffeac7ad..085361f8b 100644
 + &sound {
 +    compatible = "qcom,sm8150-sndcard";
 +    model = "xiaomi-raphael";
-+    audio-routing = "Speaker", "OUT";
-+
++    audio-routing = "MultiMedia1 Playback", "HiFi Playback";
++    mm1-dai-link {  link-name = "MultiMedia1"; cpu { sound-dai = <&q6asmdai 0>; }; };
 +    /* 定义 DAI (Digital Audio Interface) 链路 */
-+    dai-link@0 {
++    primary-mi2s-dai-link {
 +        reg = <0>;
-+        link-name = "Primary MI2S";
++        link-name = "Speaker Playback";
 +        cpu {
-+            sound-dai = <&q6asmdai 0>;
++            sound-dai = <&q6afedai 16>;
 +        };
 +        platform {
-+            sound-dai = <&q6asmdai 0>;
++            sound-dai = <&q6routing>;
 +        };
 +        codec {
 +            sound-dai = <&tfa9874>;

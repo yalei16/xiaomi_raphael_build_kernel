@@ -88,14 +88,14 @@ fi
 # rm -rf linux
 
 # 构建 firmware 和 alsa deb 包
-dpkg-deb --build --root-owner-group firmware-xiaomi-raphael
+#dpkg-deb --build --root-owner-group firmware-xiaomi-raphael
 dpkg-deb --build --root-owner-group alsa-xiaomi-raphael
 
 # 创建 output 目录并移动最终 4 个 deb 包
 mkdir -p output
 mv -f linux-image-xiaomi-raphael.deb output/ 2>/dev/null || true
 mv -f linux-headers-xiaomi-raphael.deb output/ 2>/dev/null || true
-mv -f firmware-xiaomi-raphael.deb output/ 2>/dev/null || true
+#mv -f firmware-xiaomi-raphael.deb output/ 2>/dev/null || true
 mv -f alsa-xiaomi-raphael.deb output/ 2>/dev/null || true
 
 rm -rf ./*.deb
