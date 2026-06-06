@@ -1,0 +1,161 @@
+diff --git a/sound/soc/qcom/sm8150.c b/sound/soc/qcom/sm8150.c
+index 8ad61345b..e77d34c58 100644
+--- a/sound/soc/qcom/sm8150.c
++++ b/sound/soc/qcom/sm8150.c
+@@ -56,7 +56,7 @@ static int sm8150_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
+ 	rate->min = rate->max = 48000;
+ 	channels->min = channels->max = 2;
+ 	snd_mask_none(fmt);
+-	snd_mask_set_format(fmt, SNDRV_PCM_FORMAT_S24_LE);
++	snd_mask_set_format(fmt, SNDRV_PCM_FORMAT_S16_LE);
+ 
+ 	return 0;
+ }
+@@ -106,90 +106,46 @@ static int sm8150_tdm_snd_hw_params(struct snd_pcm_substream *substream,
+ {
+ 	struct snd_soc_pcm_runtime *rtd = snd_soc_substream_to_rtd(substream);
+ 	struct snd_soc_dai *cpu_dai = snd_soc_rtd_to_cpu(rtd, 0);
+-	struct snd_soc_dai *codec_dai;
+-	int ret = 0, j;
+-	int channels, slot_width;
++	int ret = 0, slots, slot_width;
+ 	unsigned int slot_mask;
++	int channels = params_channels(params);
++
++	/* TDM IBIT clock = 12.288 MHz. With 8 slots × 32-bit × 48 kHz = 12.288 MHz.
++	 * DSP must use 32-bit slots for correct frame sync. TFA9874 reads 16-bit only. */
++	slot_width = 32;
++	slots = 8;
+ 
+-	switch (params_format(params)) {
+-	case SNDRV_PCM_FORMAT_S24_LE:
+-		slot_width = 32;
++	switch (channels) {
++	case 1:
++		slot_mask = 0x01;
++		break;
++	case 2:
++		slot_mask = 0x03;
+ 		break;
+ 	default:
+-		dev_err(rtd->dev, "%s: invalid param format 0x%x\n",
+-				__func__, params_format(params));
++		dev_err(rtd->dev, "Unsupported channel count %d\n", channels);
+ 		return -EINVAL;
+ 	}
+ 
+-	channels = params_channels(params);
+-	slot_mask = 0x44;// 0x0000FFFF >> (16-channels);
+-	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
+-		ret = snd_soc_dai_set_tdm_slot(cpu_dai, 0, slot_mask,
+-				8, slot_width);
+-		if (ret < 0) {
+-			dev_err(rtd->dev, "%s: failed to set tdm slot, err:%d\n",
+-					__func__, ret);
+-			goto end;
+-		}
+-
+-		ret = snd_soc_dai_set_channel_map(cpu_dai, 0, NULL,
+-				channels, tdm_slot_offset);
+-		if (ret < 0) {
+-			dev_err(rtd->dev, "%s: failed to set channel map, err:%d\n",
+-					__func__, ret);
+-			goto end;
+-		}
+-	} else {
+-		ret = snd_soc_dai_set_tdm_slot(cpu_dai, slot_mask, 0,
+-				8, slot_width);
+-		if (ret < 0) {
+-			dev_err(rtd->dev, "%s: failed to set tdm slot, err:%d\n",
+-					__func__, ret);
+-			goto end;
+-		}
+-
+-		ret = snd_soc_dai_set_channel_map(cpu_dai, channels,
+-				tdm_slot_offset, 0, NULL);
+-		if (ret < 0) {
+-			dev_err(rtd->dev, "%s: failed to set channel map, err:%d\n",
+-					__func__, ret);
+-			goto end;
+-		}
++	ret = snd_soc_dai_set_tdm_slot(cpu_dai, 0, slot_mask, slots, slot_width);
++	if (ret < 0) {
++		dev_err(rtd->dev, "set_tdm_slot failed: %d\n", ret);
++		return ret;
+ 	}
+ 
+-	for_each_rtd_codec_dais(rtd, j, codec_dai) {
+-		/* call dai driver's set_sysclk() callback */
+-		ret = snd_soc_dai_set_sysclk(codec_dai, 0,
+-					     12288000, SND_SOC_CLOCK_IN);
+-		if (ret < 0) {
+-			dev_err(codec_dai->dev, "fail to set sysclk, ret %d\n",
+-				ret);
+-			return ret;
+-		}
+-
+-		/* call component driver's set_sysclk() callback */
+-		ret = snd_soc_component_set_sysclk(codec_dai->component,
+-						   0, 0,
+-						   12288000, SND_SOC_CLOCK_IN);
+-		if (ret < 0) {
+-			dev_err(codec_dai->dev, "fail to set component sysclk, ret %d\n",
+-				ret);
+-			return ret;
+-		}
+-
+-		/* setup channel map */
+-		ret = snd_soc_dai_set_channel_map(codec_dai, 0, NULL,
+-						  ARRAY_SIZE(cs35l41_tdm_channel_map[j].rx),
+-						  (unsigned int *)cs35l41_tdm_channel_map[j].rx);
++	/* Channel mapping: byte offset of each channel in the TDM frame.
++	 * With 32-bit slots: slot 0 = offset 0, slot 1 = offset 4 */
++	{
++		unsigned int ch_map[2] = {0, 4};
++		ret = snd_soc_dai_set_channel_map(cpu_dai, 0, NULL,
++						  channels, ch_map);
+ 		if (ret < 0) {
+-			dev_err(codec_dai->dev, "fail to set channel map, ret %d\n",
+-				ret);
++			dev_err(rtd->dev, "set_channel_map failed: %d\n", ret);
+ 			return ret;
+ 		}
+ 	}
+ 
+-end:
+-	return ret;
++	return 0;
+ }
+ 
+ static int sm8150_snd_hw_params(struct snd_pcm_substream *substream,
+@@ -288,6 +244,14 @@ static int sm8150_dai_init(struct snd_soc_pcm_runtime *rtd)
+ 		pdata->slim_port_setup = true;
+ 
+ 		break;
++	case QUATERNARY_TDM_RX_0:
++	{
++		static const struct snd_soc_dapm_route routes[] = {
++			{ "HiFi Playback", NULL, "Quaternary TDM0 Playback" },
++		};
++		snd_soc_dapm_add_routes(card->dapm, routes, ARRAY_SIZE(routes));
++		break;
++	}
+ 	default:
+ 		break;
+ 	}
+@@ -307,14 +271,13 @@ static int sm8150_snd_startup(struct snd_pcm_substream *substream)
+ 
+ 	switch (cpu_dai->id) {
+ 	case QUATERNARY_TDM_RX_0:
+-		codec_dai_fmt |= SND_SOC_DAIFMT_NB_NF | SND_SOC_DAIFMT_DSP_A;
++		codec_dai_fmt = SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_NB_NF | SND_SOC_DAIFMT_CBC_CFC;
+ 		if (++(data->quat_tdm_clk_count) == 1) {
+ 			snd_soc_dai_set_sysclk(cpu_dai,
+ 				Q6AFE_LPASS_CLK_ID_QUAD_TDM_IBIT,
+ 				12288000, SNDRV_PCM_STREAM_PLAYBACK);
+ 		}
+ 		snd_soc_dai_set_fmt(cpu_dai, fmt);
+-		snd_soc_dai_set_fmt(codec_dai, codec_dai_fmt);
+ 		break;
+ 	case SLIMBUS_0_RX...SLIMBUS_6_TX:
+ 		break;

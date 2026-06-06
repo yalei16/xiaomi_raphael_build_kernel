@@ -57,7 +57,8 @@ fi
 patch linux/scripts/package/builddeb < patchs/builddeb.patch
 patch linux/arch/arm64/boot/dts/qcom/sm8150-xiaomi-raphael.dts < patchs/dts.patch
 patch linux/arch/arm64/boot/dts/qcom/sm8150.dtsi < patchs/sm8150.dts.patch
-
+patch linux/sound/soc/qcom/sm8150.c < patchs/sm8150-snd.patch
+patch linux/sound/soc/codecs/tfa9872.c < patchs/tfa9872-reset.patch
 patch linux/scripts/package/mkdebian < patchs/mkdebian.patch
 cd linux
 git add .
@@ -88,14 +89,14 @@ fi
 # rm -rf linux
 
 # 构建 firmware 和 alsa deb 包
-#dpkg-deb --build --root-owner-group firmware-xiaomi-raphael
+dpkg-deb --build --root-owner-group firmware-xiaomi-raphael
 dpkg-deb --build --root-owner-group alsa-xiaomi-raphael
 
 # 创建 output 目录并移动最终 4 个 deb 包
 mkdir -p output
 mv -f linux-image-xiaomi-raphael.deb output/ 2>/dev/null || true
 mv -f linux-headers-xiaomi-raphael.deb output/ 2>/dev/null || true
-#mv -f firmware-xiaomi-raphael.deb output/ 2>/dev/null || true
+mv -f firmware-xiaomi-raphael.deb output/ 2>/dev/null || true
 mv -f alsa-xiaomi-raphael.deb output/ 2>/dev/null || true
 
 rm -rf ./*.deb
