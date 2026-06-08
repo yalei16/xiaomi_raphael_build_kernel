@@ -1,0 +1,454 @@
+diff --git a/sound/soc/codecs/tfa9872.c b/sound/soc/codecs/tfa9872.c
+index 26bed4305..c52bdd9c1 100644
+--- a/sound/soc/codecs/tfa9872.c
++++ b/sound/soc/codecs/tfa9872.c
+@@ -6,11 +6,36 @@
+  */
+ 
+ #include <linux/bitfield.h>
++#include <linux/crc32.h>
++#include <linux/firmware.h>
++#include <linux/gpio/consumer.h>
+ #include <linux/i2c.h>
+ #include <linux/module.h>
+ #include <linux/regmap.h>
++#include <linux/unaligned.h>
+ #include <sound/soc.h>
+ 
++#define TFA987X_CNT_MAGIC		0x4d50	/* 'PM' */
++#define TFA987X_CNT_HDR_SIZE		14
++#define TFA987X_CNT_FW_NAME		"tfa98xx.cnt"
++
++struct tfa987x_cnt_patch {
++	u8 addr;
++	u16 value;
++	u16 mask;
++};
++
++static const struct tfa987x_cnt_patch tfa987x_cnt_profile_fallback[] = {
++	{ 0x26, 0x0001, 0x00c3 },
++	{ 0x27, 0x0002, 0x0002 },
++	{ 0x02, 0x0001, 0x00e1 },
++	{ 0x64, 0x0001, 0x0030 },
++	{ 0x74, 0x0002, 0x0001 },
++	{ 0x88, 0x0008, 0x0094 },
++};
++
++static int tfa987x_init_tdm(struct regmap *rmap);
++
+ #define TFA987X_SYS_CTRL0		0x00
+ #define TFA987X_SYS_CTRL0_PWDN_MSK	BIT(0)
+ #define TFA987X_SYS_CTRL0_I2CR_MSK	BIT(1)
+@@ -85,28 +110,61 @@
+ #define TFA9874_DCDC_CTRL6_DCVOF_MSK	GENMASK(8,  3)
+ #define TFA9874_DCDC_CTRL6_DCVOS_MSK	GENMASK(14,  9)
+ 
++static void tfa987x_power(struct snd_soc_component *component, bool on)
++{
++	unsigned int reg;
++
++	if (on) {
++		snd_soc_component_update_bits(component, TFA987X_SYS_CTRL0,
++					      TFA987X_SYS_CTRL0_PWDN_MSK |
++					      TFA987X_SYS_CTRL0_DCDC_MSK |
++					      TFA987X_SYS_CTRL0_AMPE_MSK,
++					      TFA987X_SYS_CTRL0_DCDC_MSK |
++					      TFA987X_SYS_CTRL0_AMPE_MSK);
++		reg = snd_soc_component_read(component, TFA987X_SYS_CTRL0);
++		dev_info(component->dev, "amp power ON: REG00=0x%04x\n", reg);
++	} else {
++		snd_soc_component_update_bits(component, TFA987X_SYS_CTRL0,
++					      TFA987X_SYS_CTRL0_AMPE_MSK, 0);
++	}
++}
++
+ static int tfa987x_digital_mute(struct snd_soc_dai *codec_dai, int mute, int stream)
+ {
+ 	struct snd_soc_component *component = codec_dai->component;
+-	int val = mute ? 0 : TFA987X_SYS_CTRL0_AMPE_MSK;
+ 
+ 	if (stream != SNDRV_PCM_STREAM_PLAYBACK)
+ 		return 0;
+ 
+-	snd_soc_component_update_bits(component, TFA987X_SYS_CTRL0,
+-						 TFA987X_SYS_CTRL0_AMPE_MSK, val);
++	if (mute)
++		tfa987x_power(component, false);
++	else
++		tfa987x_power(component, true);
++
++	return 0;
++}
++
++static int tfa987x_startup(struct snd_pcm_substream *substream,
++			   struct snd_soc_dai *codec_dai)
++{
++	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
++		tfa987x_power(codec_dai->component, true);
+ 
+ 	return 0;
+ }
+ 
++static void tfa987x_shutdown(struct snd_pcm_substream *substream,
++			     struct snd_soc_dai *codec_dai)
++{
++	/* Keep amp powered; DAPM/stream teardown is enough for now */
++}
++
+ static const struct snd_soc_dapm_widget tfa987x_dapm_widgets[] = {
+ 	SND_SOC_DAPM_OUTPUT("Speaker"),
+-	SND_SOC_DAPM_OUT_DRV_E("PWUP", TFA987X_SYS_CTRL0, 0, 1, NULL, 0, NULL, 0),
+ };
+ 
+ static const struct snd_soc_dapm_route tfa987x_dapm_routes[] = {
+-	{"PWUP", NULL, "HiFi Playback"},
+-	{"Speaker", NULL, "PWUP"},
++	{"Speaker", NULL, "HiFi Playback"},
+ };
+ 
+ static const struct snd_soc_component_driver tfa987x_component = {
+@@ -120,6 +178,8 @@ static const struct snd_soc_component_driver tfa987x_component = {
+ };
+ 
+ static const struct snd_soc_dai_ops tfa987x_dai_ops = {
++	.startup = tfa987x_startup,
++	.shutdown = tfa987x_shutdown,
+ 	.mute_stream = tfa987x_digital_mute,
+ };
+ 
+@@ -143,6 +203,236 @@ static const struct regmap_config tfa987x_regmap_config = {
+ 	.max_register = 0xff,
+ };
+ 
++static bool tfa987x_cnt_skip_reg(u8 addr)
++{
++	/* Never let cnt override power/TDM routing */
++	if (addr <= 0x05 || (addr >= 0x20 && addr <= 0x27))
++		return true;
++	return false;
++}
++
++static int tfa987x_init_tdm(struct regmap *rmap)
++{
++	int ret;
++
++	/*
++	 * Match Qualcomm Quaternary TDM: 8 slots, 32-bit slot width on the
++	 * bus, 16-bit PCM in the lower bits. Speaker data on TDM slot 0.
++	 */
++	ret = regmap_update_bits(rmap, TFA987X_TDM_CFG0,
++				 TFA987X_TDM_CFG0_FSBCLKS_MSK,
++				 FIELD_PREP(TFA987X_TDM_CFG0_FSBCLKS_MSK, 0));
++	if (ret)
++		return ret;
++
++	ret = regmap_update_bits(rmap, TFA987X_TDM_CFG1,
++				 TFA987X_TDM_CFG1_NSLOTS_MSK |
++				 TFA987X_TDM_CFG1_SLOTBITS_MSK,
++				 FIELD_PREP(TFA987X_TDM_CFG1_NSLOTS_MSK, 8) |
++				 FIELD_PREP(TFA987X_TDM_CFG1_SLOTBITS_MSK, 31));
++	if (ret)
++		return ret;
++
++	ret = regmap_update_bits(rmap, TFA987X_TDM_CFG2,
++				 TFA987X_TDM_CFG2_SWIDTH_MSK,
++				 FIELD_PREP(TFA987X_TDM_CFG2_SWIDTH_MSK, 15));
++	if (ret)
++		return ret;
++
++	ret = regmap_update_bits(rmap, TFA987X_TDM_CFG3,
++				 TFA987X_TDM_CFG3_SPKE_MSK |
++				 TFA987X_TDM_CFG3_DCE_MSK |
++				 TFA987X_TDM_CFG3_CSE_MSK |
++				 TFA987X_TDM_CFG3_VSE_MSK,
++				 TFA987X_TDM_CFG3_SPKE_MSK);
++	if (ret)
++		return ret;
++
++	ret = regmap_update_bits(rmap, TFA987X_TDM_CFG6,
++				 TFA987X_TDM_CFG6_SPKS_MSK,
++				 FIELD_PREP(TFA987X_TDM_CFG6_SPKS_MSK, 0));
++	if (ret)
++		return ret;
++
++	return regmap_update_bits(rmap, TFA987X_SYS_CTRL2,
++				  TFA987X_SYS_CTRL2_AUDFS_MSK,
++				  FIELD_PREP(TFA987X_SYS_CTRL2_AUDFS_MSK, 1));
++}
++
++static int tfa987x_apply_cnt_patch(struct regmap *rmap,
++				   const struct tfa987x_cnt_patch *patch)
++{
++	unsigned int old, new;
++	int ret;
++
++	ret = regmap_read(rmap, patch->addr, &old);
++	if (ret)
++		return ret;
++
++	new = (old & ~patch->mask) | (patch->value & patch->mask);
++	return regmap_write(rmap, patch->addr, new);
++}
++
++static int tfa987x_apply_cnt_patches(struct regmap *rmap,
++				     const struct tfa987x_cnt_patch *patches,
++				     size_t count)
++{
++	size_t i;
++	int ret;
++
++	for (i = 0; i < count; i++) {
++		if (tfa987x_cnt_skip_reg(patches[i].addr))
++			continue;
++		ret = tfa987x_apply_cnt_patch(rmap, &patches[i]);
++		if (ret)
++			return ret;
++	}
++
++	return 0;
++}
++
++static int tfa987x_cnt_verify(const struct firmware *fw)
++{
++	const u8 *data = fw->data;
++	u32 crc, expected;
++
++	if (fw->size < 44)
++		return -EINVAL;
++
++	if (get_unaligned_le16(data) != TFA987X_CNT_MAGIC)
++		return -EINVAL;
++
++	expected = get_unaligned_le32(data + 10);
++	crc = crc32_le(~0, data + TFA987X_CNT_HDR_SIZE,
++		       fw->size - TFA987X_CNT_HDR_SIZE);
++	if (crc != expected) {
++		/* tfa98xx.cnt stores the raw crc32_le result */
++		if (~crc != expected)
++			return -EINVAL;
++	}
++
++	return 0;
++}
++
++static int tfa987x_cnt_find(const u8 *data, size_t size,
++			    const u8 *pattern, size_t pattern_len,
++			    size_t *offset)
++{
++	size_t i;
++
++	if (pattern_len > size)
++		return -ENOENT;
++
++	for (i = 0; i <= size - pattern_len; i++) {
++		if (!memcmp(data + i, pattern, pattern_len)) {
++			*offset = i;
++			return 0;
++		}
++	}
++
++	return -ENOENT;
++}
++
++static int tfa987x_cnt_apply_block(struct regmap *rmap, struct device *dev,
++				   const u8 *data, size_t size)
++{
++	size_t i = 0;
++
++	while (i + 3 < size) {
++		u8 addr = data[i];
++		u16 value = get_unaligned_le16(data + i + 1);
++		u16 mask = data[i + 3];
++		struct tfa987x_cnt_patch patch;
++		int ret;
++
++		if (!memcmp(data + i, "PA1", 3))
++			break;
++
++		if (value == 0 && mask > 0 && mask <= 50) {
++			usleep_range(mask * 1000, mask * 1000 + 500);
++			i += 4;
++			continue;
++		}
++
++		if (addr > 0x90 || (mask == 0 && value == 0))
++			break;
++
++		if (tfa987x_cnt_skip_reg(addr)) {
++			i += 4;
++			continue;
++		}
++
++		patch.addr = addr;
++		patch.value = value;
++		patch.mask = mask;
++		ret = tfa987x_apply_cnt_patch(rmap, &patch);
++		if (ret)
++			return ret;
++
++		i += 4;
++	}
++
++	return 0;
++}
++
++static int tfa987x_load_cnt(struct regmap *rmap, struct device *dev)
++{
++	static const u8 dev_mark[] = { 0x08, 0x01, 0x00, 0x02 };
++	static const u8 prof_mark[] = { 0x01, 0x00, 0x03, 0x21, 0x01, 0x00, 0x30 };
++	const struct firmware *fw;
++	size_t dev_off, prof_off;
++	int ret;
++
++	ret = request_firmware(&fw, TFA987X_CNT_FW_NAME, dev);
++	if (ret) {
++		dev_warn(dev, "cnt %s not found (%d), using embedded profile\n",
++			 TFA987X_CNT_FW_NAME, ret);
++		return tfa987x_apply_cnt_patches(rmap,
++				tfa987x_cnt_profile_fallback,
++				ARRAY_SIZE(tfa987x_cnt_profile_fallback));
++	}
++
++	ret = tfa987x_cnt_verify(fw);
++	if (ret) {
++		dev_warn(dev, "cnt checksum invalid, using embedded profile\n");
++		release_firmware(fw);
++		return tfa987x_apply_cnt_patches(rmap,
++				tfa987x_cnt_profile_fallback,
++				ARRAY_SIZE(tfa987x_cnt_profile_fallback));
++	}
++
++	ret = tfa987x_cnt_find(fw->data, fw->size, dev_mark, sizeof(dev_mark),
++			       &dev_off);
++	if (!ret) {
++		ret = tfa987x_cnt_apply_block(rmap, dev, fw->data + dev_off,
++					      fw->size - dev_off);
++		if (ret)
++			dev_warn(dev, "cnt device block failed: %d\n", ret);
++	}
++
++	ret = tfa987x_cnt_find(fw->data, fw->size, prof_mark, sizeof(prof_mark),
++			       &prof_off);
++	if (!ret) {
++		prof_off += 3;
++		ret = tfa987x_cnt_apply_block(rmap, dev, fw->data + prof_off,
++					      fw->size - prof_off);
++		if (ret) {
++			dev_warn(dev, "cnt profile block failed: %d\n", ret);
++			ret = tfa987x_apply_cnt_patches(rmap,
++					tfa987x_cnt_profile_fallback,
++					ARRAY_SIZE(tfa987x_cnt_profile_fallback));
++		}
++	} else {
++		dev_warn(dev, "cnt profile block missing, using embedded profile\n");
++		ret = tfa987x_apply_cnt_patches(rmap,
++				tfa987x_cnt_profile_fallback,
++				ARRAY_SIZE(tfa987x_cnt_profile_fallback));
++	}
++
++	release_firmware(fw);
++	return ret;
++}
++
+ static bool tfa987x_setup_dcdc(struct device *dev, struct regmap *rmap, u16 rev)
+ {
+ 	u32 mcc, dcvof, dcvos, dctrip, dctrip2 = 0;
+@@ -219,9 +509,23 @@ static int tfa987x_i2c_probe(struct i2c_client *i2c)
+ {
+ 	struct device *dev = &i2c->dev;
+ 	struct regmap *rmap;
++	struct gpio_desc *reset_gpiod;
+ 	unsigned int rev;
+ 	int ret;
+ 
++	reset_gpiod = devm_gpiod_get_optional(dev, "reset", GPIOD_OUT_LOW);
++	if (IS_ERR(reset_gpiod))
++		return PTR_ERR(reset_gpiod);
++
++	if (reset_gpiod) {
++		gpiod_set_value_cansleep(reset_gpiod, 0);
++		usleep_range(1000, 2000);
++		gpiod_set_value_cansleep(reset_gpiod, 1);
++		usleep_range(1000, 2000);
++		gpiod_set_value_cansleep(reset_gpiod, 0);
++		usleep_range(1000, 2000);
++	}
++
+ 	rmap = devm_regmap_init_i2c(i2c, &tfa987x_regmap_config);
+ 	if (IS_ERR(rmap))
+ 		return PTR_ERR(rmap);
+@@ -256,29 +560,27 @@ static int tfa987x_i2c_probe(struct i2c_client *i2c)
+ 	regmap_update_bits(rmap, TFA987X_AUDIO_CTRL,
+ 				 TFA987X_AUDIO_CTRL_DPSA_MSK, 0);
+ 
+-	/* Setup TDM 16 bit 1 slot config */
+-	regmap_update_bits(rmap, TFA987X_TDM_CFG0,
+-				 TFA987X_TDM_CFG0_FSBCLKS_MSK,
+-				 FIELD_PREP(TFA987X_TDM_CFG0_FSBCLKS_MSK, 0));
+-	regmap_update_bits(rmap, TFA987X_TDM_CFG1,
+-				 TFA987X_TDM_CFG1_NSLOTS_MSK |
+-				 TFA987X_TDM_CFG1_SLOTBITS_MSK,
+-				 FIELD_PREP(TFA987X_TDM_CFG1_NSLOTS_MSK, 1) |
+-				 FIELD_PREP(TFA987X_TDM_CFG1_SLOTBITS_MSK, 15));
+-	regmap_update_bits(rmap, TFA987X_TDM_CFG2,
+-				 TFA987X_TDM_CFG2_SWIDTH_MSK,
+-				 FIELD_PREP(TFA987X_TDM_CFG2_SWIDTH_MSK, 15));
++	ret = tfa987x_init_tdm(rmap);
++	if (ret) {
++		dev_err(dev, "Failed to init TDM: %d\n", ret);
++		return ret;
++	}
+ 
+-	/* No current/voltage sense over TDM */
+-	regmap_update_bits(rmap, TFA987X_TDM_CFG3,
+-				 TFA987X_TDM_CFG3_SPKE_MSK |
+-				 TFA987X_TDM_CFG3_DCE_MSK |
+-				 TFA987X_TDM_CFG3_CSE_MSK |
+-				 TFA987X_TDM_CFG3_VSE_MSK,
+-				 TFA987X_TDM_CFG3_SPKE_MSK);
+-	regmap_update_bits(rmap, TFA987X_TDM_CFG6,
+-				 TFA987X_TDM_CFG6_SPKS_MSK,
+-				 FIELD_PREP(TFA987X_TDM_CFG6_SPKS_MSK, 0));
++	/*
++	 * Apply vendor speaker profile from Android tfa98xx.cnt (non-TDM
++	 * tuning only; TDM is forced by tfa987x_init_tdm()).
++	 */
++	ret = tfa987x_load_cnt(rmap, dev);
++	if (ret)
++		dev_warn(dev, "cnt profile apply failed: %d\n", ret);
++
++	ret = tfa987x_init_tdm(rmap);
++	if (ret)
++		return ret;
++
++	/* cnt may set internal mute; force output enabled */
++	regmap_update_bits(rmap, TFA987X_AUDIO_CTRL,
++			   TFA9872_AUDIO_CTRL_INTSMUTE_MSK, 0);
+ 
+ 	if ((rev & 0xff) == 0x72)
+ 		regmap_update_bits(rmap, TFA987X_MODE1_DET1,
+@@ -293,6 +595,19 @@ static int tfa987x_i2c_probe(struct i2c_client *i2c)
+ 				 TFA987X_SYS_CTRL1_MANSCONF_MSK,
+ 				 TFA987X_SYS_CTRL1_MANSCONF_MSK);
+ 
++	/* Bring-up default: near-max gain */
++	regmap_update_bits(rmap, TFA987X_AMP_CFG,
++				 TFA987X_AMP_CFG_GAIN_MSK,
++				 FIELD_PREP(TFA987X_AMP_CFG_GAIN_MSK, 0x60));
++
++	/* Power amp on at probe so short test bursts are audible */
++	regmap_update_bits(rmap, TFA987X_SYS_CTRL0,
++			   TFA987X_SYS_CTRL0_PWDN_MSK |
++			   TFA987X_SYS_CTRL0_DCDC_MSK |
++			   TFA987X_SYS_CTRL0_AMPE_MSK,
++			   TFA987X_SYS_CTRL0_DCDC_MSK |
++			   TFA987X_SYS_CTRL0_AMPE_MSK);
++
+ 	return devm_snd_soc_register_component(dev, &tfa987x_component,
+ 						    &tfa987x_dai, 1);
+ }
+@@ -315,3 +630,4 @@ module_i2c_driver(tfa987x_i2c_driver);
+ 
+ MODULE_DESCRIPTION("ASoC NXP Semiconductors TFA9872/TFA9874 driver");
+ MODULE_LICENSE("GPL v2");
++MODULE_FIRMWARE(TFA987X_CNT_FW_NAME);

@@ -1,8 +1,73 @@
 diff --git a/arch/arm64/boot/dts/qcom/sm8150-xiaomi-raphael.dts b/arch/arm64/boot/dts/qcom/sm8150-xiaomi-raphael.dts
-index 04646b389..2e9e535f0 100644
+index 04646b389..735ba2875 100644
 --- a/arch/arm64/boot/dts/qcom/sm8150-xiaomi-raphael.dts
 +++ b/arch/arm64/boot/dts/qcom/sm8150-xiaomi-raphael.dts
-@@ -1181,3 +1181,91 @@ &wifi {
+@@ -11,6 +11,7 @@
+ #include <dt-bindings/pinctrl/qcom,pmic-gpio.h>
+ #include <dt-bindings/regulator/qcom,rpmh-regulator.h>
+ #include <dt-bindings/usb/pd.h>
++#include <dt-bindings/sound/qcom,q6afe.h>
+ #include "sm8150.dtsi"
+ #include "pm8150.dtsi"
+ #include "pm8150b.dtsi"
+@@ -791,26 +792,6 @@ &qupv3_id_2 {
+ 	status = "okay";
+ };
+ 
+-&remoteproc_adsp {
+-	status = "okay";
+-	firmware-name = "qcom/sm8150/Xiaomi/raphael/adsp.mbn";
+-};
+-
+-&remoteproc_cdsp {
+-	status = "okay";
+-	firmware-name = "qcom/sm8150/Xiaomi/raphael/cdsp.mbn";
+-};
+-
+-&remoteproc_mpss {
+-	status = "okay";
+-	firmware-name = "qcom/sm8150/Xiaomi/raphael/modem.mbn";
+-};
+-
+-&remoteproc_slpi {
+-	status = "disabled";
+-	firmware-name = "qcom/sm8150/Xiaomi/raphael/slpi.mbn";
+-};
+-
+ &tlmm {
+     gpio-line-names = 
+         "NFC_ESE_SPI_MISO",     /* GPIO_0 */
+@@ -1009,6 +990,29 @@ panel_te_pin: panel-te-state {
+         bias-pull-down;
+     };
+ 
++    /* SPKR_I2S_BCK/WS (Nabu: gpio137/138); DOUT on gpio139 (Raphael) */
++    quat_tdm_active: quat-tdm-active-state {
++        pins = "gpio137", "gpio138";
++        function = "qua_mi2s";
++        drive-strength = <8>;
++        bias-disable;
++        output-high;
++    };
++
++    quat_tdm_sd1_active: quat-tdm-sd1-active-state {
++        pins = "gpio139";
++        function = "qua_mi2s";
++        drive-strength = <8>;
++        bias-disable;
++    };
++
++    quat_tdm_sd2_active: quat-tdm-sd2-active-state {
++        pins = "gpio140";
++        function = "qua_mi2s";
++        drive-strength = <8>;
++        bias-disable;
++    };
++
+     qup_uart13_default: qup-uart13-default-state {
+ 	cts-pins {
+ 		pins = "gpio43";
+@@ -1181,3 +1185,93 @@ &wifi {
  
  	status = "okay";
  };
@@ -29,7 +94,7 @@ index 04646b389..2e9e535f0 100644
 +
 +&q6afedai {
 +	dai@72 {
-+		reg = <72>;
++		reg = <QUATERNARY_TDM_RX_0>;
 +		qcom,tdm-sync-mode = <1>;
 +		qcom,tdm-sync-src = <1>;
 +		qcom,tdm-data-out = <0>;
@@ -70,6 +135,8 @@ index 04646b389..2e9e535f0 100644
 +&sound {
 +	compatible = "qcom,sm8150-sndcard";
 +	model = "xiaomi-raphael";
++	pinctrl-0 = <&quat_tdm_active &quat_tdm_sd1_active &quat_tdm_sd2_active>;
++	pinctrl-names = "default";
 +	clocks = <&q6afecc 102 0>,
 +		 <&q6afecc 103 0>;
 +	clock-names = "lpass_macro", "lpass_dcodec";
@@ -84,7 +151,7 @@ index 04646b389..2e9e535f0 100644
 +		no-pcm;
 +		link-name = "Speaker Playback";
 +		cpu {
-+			sound-dai = <&q6afedai 72>;
++			sound-dai = <&q6afedai QUATERNARY_TDM_RX_0>;
 +		};
 +		platform {
 +			sound-dai = <&q6routing>;

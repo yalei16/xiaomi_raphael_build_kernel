@@ -1,3 +1,274 @@
+diff --git a/arch/arm64/boot/dts/qcom/sm8150-xiaomi-raphael.dts b/arch/arm64/boot/dts/qcom/sm8150-xiaomi-raphael.dts
+index 04646b389..735ba2875 100644
+--- a/arch/arm64/boot/dts/qcom/sm8150-xiaomi-raphael.dts
++++ b/arch/arm64/boot/dts/qcom/sm8150-xiaomi-raphael.dts
+@@ -11,6 +11,7 @@
+ #include <dt-bindings/pinctrl/qcom,pmic-gpio.h>
+ #include <dt-bindings/regulator/qcom,rpmh-regulator.h>
+ #include <dt-bindings/usb/pd.h>
++#include <dt-bindings/sound/qcom,q6afe.h>
+ #include "sm8150.dtsi"
+ #include "pm8150.dtsi"
+ #include "pm8150b.dtsi"
+@@ -791,26 +792,6 @@ &qupv3_id_2 {
+ 	status = "okay";
+ };
+ 
+-&remoteproc_adsp {
+-	status = "okay";
+-	firmware-name = "qcom/sm8150/Xiaomi/raphael/adsp.mbn";
+-};
+-
+-&remoteproc_cdsp {
+-	status = "okay";
+-	firmware-name = "qcom/sm8150/Xiaomi/raphael/cdsp.mbn";
+-};
+-
+-&remoteproc_mpss {
+-	status = "okay";
+-	firmware-name = "qcom/sm8150/Xiaomi/raphael/modem.mbn";
+-};
+-
+-&remoteproc_slpi {
+-	status = "disabled";
+-	firmware-name = "qcom/sm8150/Xiaomi/raphael/slpi.mbn";
+-};
+-
+ &tlmm {
+     gpio-line-names = 
+         "NFC_ESE_SPI_MISO",     /* GPIO_0 */
+@@ -1009,6 +990,29 @@ panel_te_pin: panel-te-state {
+         bias-pull-down;
+     };
+ 
++    /* SPKR_I2S_BCK/WS (Nabu: gpio137/138); DOUT on gpio139 (Raphael) */
++    quat_tdm_active: quat-tdm-active-state {
++        pins = "gpio137", "gpio138";
++        function = "qua_mi2s";
++        drive-strength = <8>;
++        bias-disable;
++        output-high;
++    };
++
++    quat_tdm_sd1_active: quat-tdm-sd1-active-state {
++        pins = "gpio139";
++        function = "qua_mi2s";
++        drive-strength = <8>;
++        bias-disable;
++    };
++
++    quat_tdm_sd2_active: quat-tdm-sd2-active-state {
++        pins = "gpio140";
++        function = "qua_mi2s";
++        drive-strength = <8>;
++        bias-disable;
++    };
++
+     qup_uart13_default: qup-uart13-default-state {
+ 	cts-pins {
+ 		pins = "gpio43";
+@@ -1181,3 +1185,93 @@ &wifi {
+ 
+ 	status = "okay";
+ };
++
++&remoteproc_adsp {
++	status = "okay";
++	firmware-name = "qcom/sm8150/Xiaomi/raphael/adsp.mbn";
++};
++
++&remoteproc_cdsp {
++	status = "okay";
++	firmware-name = "qcom/sm8150/Xiaomi/raphael/cdsp.mbn";
++};
++
++&remoteproc_mpss {
++	status = "okay";
++	firmware-name = "qcom/sm8150/Xiaomi/raphael/modem.mdt";
++};
++
++&remoteproc_slpi {
++	status = "okay";
++	firmware-name = "qcom/sm8150/Xiaomi/raphael/slpi_rp.mdt";
++};
++
++&q6afedai {
++	dai@72 {
++		reg = <QUATERNARY_TDM_RX_0>;
++		qcom,tdm-sync-mode = <1>;
++		qcom,tdm-sync-src = <1>;
++		qcom,tdm-data-out = <0>;
++		qcom,tdm-invert-sync = <1>;
++		qcom,tdm-data-delay = <1>;
++		qcom,tdm-data-align = <0>;
++	};
++};
++
++&q6asmdai {
++	dai@0 {
++		reg = <0>;
++	};
++	dai@1 {
++		reg = <1>;
++	};
++};
++
++&qupv3_id_0 {
++	status = "okay";
++};
++
++&i2c1 {
++	status = "okay";
++	tfa9874: audio-codec@34 {
++		compatible = "nxp,tfa9874";
++		reg = <0x34>;
++		#sound-dai-cells = <0>;
++		vddd-supply = <&vreg_l7a_1p8>;
++		vdda-supply = <&vreg_l10c_3p3>;
++		reset-gpios = <&tlmm 59 GPIO_ACTIVE_HIGH>;
++		interrupt-parent = <&tlmm>;
++		interrupts = <141 IRQ_TYPE_LEVEL_LOW>;
++		status = "okay";
++	};
++};
++
++&sound {
++	compatible = "qcom,sm8150-sndcard";
++	model = "xiaomi-raphael";
++	pinctrl-0 = <&quat_tdm_active &quat_tdm_sd1_active &quat_tdm_sd2_active>;
++	pinctrl-names = "default";
++	clocks = <&q6afecc 102 0>,
++		 <&q6afecc 103 0>;
++	clock-names = "lpass_macro", "lpass_dcodec";
++	audio-routing = "HiFi Playback", "Quaternary TDM0 Playback", "Speaker", "HiFi Playback";
++	mm1-dai-link {
++		link-name = "MultiMedia1";
++		cpu {
++			sound-dai = <&q6asmdai 0>;
++		};
++	};
++	primary-tdm-dai-link {
++		no-pcm;
++		link-name = "Speaker Playback";
++		cpu {
++			sound-dai = <&q6afedai QUATERNARY_TDM_RX_0>;
++		};
++		platform {
++			sound-dai = <&q6routing>;
++		};
++		codec {
++			sound-dai = <&tfa9874>;
++		};
++	};
++};
+diff --git a/arch/arm64/boot/dts/qcom/sm8150.dtsi b/arch/arm64/boot/dts/qcom/sm8150.dtsi
+index 079e2f0a6..bb7ad27fe 100644
+--- a/arch/arm64/boot/dts/qcom/sm8150.dtsi
++++ b/arch/arm64/boot/dts/qcom/sm8150.dtsi
+@@ -794,6 +794,12 @@ qseecom_mem: memory@9e400000 {
+ 			reg = <0x0 0x9e400000 0x0 0x1400000>;
+ 			no-map;
+ 		};
++
++		fastrpc_mem: memory@ae800000 {
++			reg = <0x0 0xae800000 0x0 0x2000000>;
++			no-map;
++		};
++
+ 	};
+ 
+ 	smem {
+@@ -2271,7 +2277,7 @@ glink-edge {
+ 				label = "dsps";
+ 				qcom,remote-pid = <3>;
+ 				mboxes = <&apss_shared 24>;
+-
++				
+ 				fastrpc {
+ 					compatible = "qcom,fastrpc";
+ 					qcom,glink-channels = "fastrpcglink-apps-dsp";
+@@ -2279,6 +2285,8 @@ fastrpc {
+ 					qcom,non-secure-domain;
+ 					#address-cells = <1>;
+ 					#size-cells = <0>;
++					  
++					qcom,vmids = <0x3 0xf 0x5 0x6>;  
+ 
+ 					compute-cb@1 {
+ 						compatible = "qcom,fastrpc-compute-cb";
+@@ -3455,6 +3463,7 @@ fastrpc {
+ 					qcom,non-secure-domain;
+ 					#address-cells = <1>;
+ 					#size-cells = <0>;
++					
+ 
+ 					compute-cb@1 {
+ 						compatible = "qcom,fastrpc-compute-cb";
+@@ -4499,6 +4508,7 @@ fastrpc {
+ 					qcom,non-secure-domain;
+ 					#address-cells = <1>;
+ 					#size-cells = <0>;
++					
+ 
+ 					compute-cb@3 {
+ 						compatible = "qcom,fastrpc-compute-cb";
+diff --git a/scripts/package/builddeb b/scripts/package/builddeb
+index 3627ca227..6623de337 100755
+--- a/scripts/package/builddeb
++++ b/scripts/package/builddeb
+@@ -47,9 +47,10 @@ install_linux_image () {
+ 		cp ${KCONFIG_CONFIG} "${pdir}/usr/share/doc/${pname}/config"
+ 		gzip "${pdir}/usr/share/doc/${pname}/config"
+ 	else
+-		mkdir -p "${pdir}/boot"
++		mkdir -p "${pdir}/boot/dtbs/qcom"
+ 		cp System.map "${pdir}/boot/System.map-${KERNELRELEASE}"
+ 		cp ${KCONFIG_CONFIG} "${pdir}/boot/config-${KERNELRELEASE}"
++		cp "${pdir}/usr/lib/linux-image-${KERNELRELEASE}/qcom/sm8150-"*.dtb "${pdir}/boot/dtbs/qcom/"
+ 	fi
+ 
+ 	# Not all arches have the same installed path in debian
+diff --git a/scripts/package/mkdebian b/scripts/package/mkdebian
+index d4b007b38..bfa75813f 100755
+--- a/scripts/package/mkdebian
++++ b/scripts/package/mkdebian
+@@ -223,17 +223,6 @@ Description: Linux kernel, version ${KERNELRELEASE}
+ EOF
+ 
+ if [ "${SRCARCH}" != um ]; then
+-cat <<EOF >> debian/control
+-
+-Package: linux-libc-dev
+-Section: devel
+-Provides: linux-kernel-headers
+-Architecture: $debarch
+-Description: Linux support headers for userspace development
+- This package provides userspaces headers from the Linux kernel.  These headers
+- are used by the installed headers for GNU glibc and other system libraries.
+-Multi-Arch: same
+-EOF
+ 
+ if is_enabled CONFIG_MODULES; then
+ cat <<EOF >> debian/control
+@@ -249,18 +238,6 @@ EOF
+ fi
+ fi
+ 
+-if is_enabled CONFIG_DEBUG_INFO; then
+-cat <<EOF >> debian/control
+-
+-Package: linux-image-${KERNELRELEASE}-dbg
+-Section: debug
+-Architecture: $debarch
+-Build-Profiles: <!pkg.${sourcename}.nokerneldbg>
+-Description: Linux kernel debugging symbols for ${KERNELRELEASE}
+- This package will come in handy if you need to debug the kernel. It provides
+- all the necessary debug symbols for the kernel and its modules.
+-EOF
+-fi
+ 
+ cat <<EOF > debian/rules.vars
+ ARCH := ${ARCH}
 diff --git a/sound/soc/qcom/sm8150.c b/sound/soc/qcom/sm8150.c
 index 8ad61345b..d315953bc 100644
 --- a/sound/soc/qcom/sm8150.c
