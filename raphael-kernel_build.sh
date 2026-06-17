@@ -54,16 +54,10 @@ else
 fi
 
 # 应用补丁
-patch linux/scripts/package/builddeb < patchs/builddeb.patch
-patch linux/arch/arm64/boot/dts/qcom/sm8150-xiaomi-raphael.dts < patchs/dts.patch
-patch linux/arch/arm64/boot/dts/qcom/sm8150.dtsi < patchs/sm8150.dts.patch
-patch linux/sound/soc/qcom/sm8150.c < patchs/sm8150-snd.patch
-patch linux/sound/soc/qcom/qdsp6/q6dsp-lpass-ports.c < patchs/q6dsp-lpass-ports.c.patch
-patch linux/sound/soc/codecs/tfa9872.c < patchs/tfa9872.patch
-patch linux/scripts/package/mkdebian < patchs/mkdebian.patch
+
 cd linux
-git add .
-git commit -m "patches: builddeb dts mkdebian"
+git apply ../patchs/raphael.patch
+
 
 # 生成内核配置
 cp ../raphael.config arch/arm64/configs/
