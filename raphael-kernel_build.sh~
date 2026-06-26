@@ -57,6 +57,7 @@ fi
 
 cd linux
 git apply ../patchs/raphael.patch
+git apply ../patchs/display-panel-timing.patch
 
 
 # 生成内核配置
