@@ -1,8 +1,8 @@
 diff --git a/arch/arm64/boot/dts/qcom/sm8150-xiaomi-raphael.dts b/arch/arm64/boot/dts/qcom/sm8150-xiaomi-raphael.dts
-index e51e2f1b4..6862f9405 100644
+index e51e2f1b4..02711295e 100644
 --- a/arch/arm64/boot/dts/qcom/sm8150-xiaomi-raphael.dts
 +++ b/arch/arm64/boot/dts/qcom/sm8150-xiaomi-raphael.dts
-@@ -10,8 +10,10 @@
+@@ -10,13 +10,15 @@
  #include <dt-bindings/leds/common.h>
  #include <dt-bindings/pinctrl/qcom,pmic-gpio.h>
  #include <dt-bindings/regulator/qcom,rpmh-regulator.h>
@@ -13,10 +13,17 @@ index e51e2f1b4..6862f9405 100644
  #include "pm8150.dtsi"
  #include "pm8150b.dtsi"
  #include "pm8150l.dtsi"
-@@ -180,16 +182,6 @@ cdsp_sec_mem: memory@a4c00000 {
+ 
+-/* 
++/*
+  * Rewrite reserved memory maps inherited from sm8150.dtsi to match the ones
+  * used on xiaomi-raphael.
+  * Note: this list is ordered by its memory address in sm8150.dtsi.
+@@ -179,17 +181,7 @@ cdsp_sec_mem: memory@a4c00000 {
+ 			reg = <0x0 0xa4c00000 0x0 0x3c00000>;
  			no-map;
  		};
- 		
+-		
 -		ramoops@a1600000 {
 -			compatible = "ramoops";
 -			reg = <0x0 0xa1600000 0x0 0x800000>;
@@ -27,10 +34,50 @@ index e51e2f1b4..6862f9405 100644
 -			record-size = <0>;
 -			no-map;
 -		};
++
  
  		rmtfs_mem: memory@fe101000 {
  			compatible = "qcom,rmtfs-mem";
-@@ -576,7 +568,7 @@ &gpu {
+@@ -235,7 +227,7 @@ vreg_tp_3p3: regulator-tp-3p3 {
+ 		regulator-boot-on;
+ 		startup-delay-us = <5000>;
+ 	};
+-	
++
+ 	vreg_tp_1p8: regulator-tp-1p8 {
+ 		compatible = "regulator-fixed";
+ 		regulator-name = "vreg_tp_1p8";
+@@ -362,14 +354,16 @@ vreg_l5a_0p875: ldo5 {
+ 			regulator-min-microvolt = <880000>;
+ 			regulator-max-microvolt = <880000>;
+ 			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+-			regulator-allow-set-load;
+-			regulator-allowed-modes = <RPMH_REGULATOR_MODE_LPM
+-						   RPMH_REGULATOR_MODE_HPM>;
++			regulator-boot-on;
++			regulator-always-on;
++			/* vdda_qlink_lv: keep HPM for WTR Q-Link LS resume */
+ 		};
+ 
+ 		vreg_l6a_1p2: ldo6 {
+ 			regulator-min-microvolt = <1200000>;
+ 			regulator-max-microvolt = <1200000>;
++			regulator-boot-on;
++			regulator-always-on;
+ 			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+ 		};
+ 
+@@ -508,6 +502,9 @@ vreg_l3c_1p2: ldo3 {
+ 			regulator-min-microvolt = <1200000>;
+ 			regulator-max-microvolt = <1200000>;
+ 			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
++			regulator-boot-on;
++			regulator-always-on;
++			/* vdda_qlink_hv_ck: WTR Q-Link PHY HV clock domain */
+ 		};
+ 
+ 		vddpx_5:
+@@ -576,7 +573,7 @@ &gpu {
  };
  
  &gpu_zap_shader {
@@ -39,7 +86,7 @@ index e51e2f1b4..6862f9405 100644
  };
  
  &i2c19 {
-@@ -594,11 +586,23 @@ goodix@5d {
+@@ -594,11 +591,23 @@ goodix@5d {
  	};
  };
  
@@ -64,7 +111,25 @@ index e51e2f1b4..6862f9405 100644
  };
  
  &mdss_dsi0 {
-@@ -783,6 +787,10 @@ &pon_resin {
+@@ -608,7 +617,7 @@ panel:	panel@0 {
+ 		compatible = "samsung,ams639rq08";
+ 		reg = <0>;
+ 		status = "okay";
+-		
++
+ 		vddio-supply = <&vreg_l14a_1p8>;
+ 		vdd3p3-supply = <&vreg_disp_vci>;
+ 
+@@ -616,7 +625,7 @@ panel:	panel@0 {
+ 		vsp-supply = <&vreg_lab>;
+ 
+ 		reset-gpios = <&tlmm 6 GPIO_ACTIVE_LOW>;
+-		
++
+ 		pinctrl-names = "default", "sleep";
+ 		pinctrl-0 = <&panel_reset_pin &panel_te_pin>;
+ 
+@@ -783,6 +792,10 @@ &pon_resin {
  	linux,code = <KEY_VOLUMEDOWN>;
  };
  
@@ -75,7 +140,7 @@ index e51e2f1b4..6862f9405 100644
  &qupv3_id_1 {
  	status = "okay";
  };
-@@ -793,22 +801,131 @@ &qupv3_id_2 {
+@@ -793,26 +806,135 @@ &qupv3_id_2 {
  
  &remoteproc_adsp {
  	status = "okay";
@@ -211,7 +276,12 @@ index e51e2f1b4..6862f9405 100644
  };
  
  &tlmm {
-@@ -1100,6 +1217,29 @@ tp_reset_suspend: tp_reset_suspend {
+-    gpio-line-names = 
++    gpio-line-names =
+         "NFC_ESE_SPI_MISO",     /* GPIO_0 */
+         "NFC_ESE_SPI_MOSI",     /* GPIO_1 */
+         "NFC_ESE_SPI_CLK",      /* GPIO_2 */
+@@ -1100,6 +1222,29 @@ tp_reset_suspend: tp_reset_suspend {
          bias-disable;
          output-high;
      };
@@ -241,13 +311,6 @@ index e51e2f1b4..6862f9405 100644
  };
  
  &uart2 {
-@@ -1183,4 +1323,4 @@ &wifi {
- 	mac-address = [02 00 78 e0 04 ef];
- 
- 	status = "okay";
--};
-+};
-\ No newline at end of file
 diff --git a/arch/arm64/kernel/cpuinfo.c b/arch/arm64/kernel/cpuinfo.c
 index 6149bc912..c010daea5 100644
 --- a/arch/arm64/kernel/cpuinfo.c
@@ -301,6 +364,181 @@ index f8ebbd4a5..6646d9a54 100644
  	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, MCS_ACCESS_PROT_OFF, 0x0c);
  	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xe1, 0x19);
  	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, MCS_PASSWD1, 0xa5, 0xa5);
+diff --git a/drivers/net/ipa/ipa_main.c b/drivers/net/ipa/ipa_main.c
+index 349a2d44f..97c0dc54b 100644
+--- a/drivers/net/ipa/ipa_main.c
++++ b/drivers/net/ipa/ipa_main.c
+@@ -907,6 +907,26 @@ static int ipa_probe(struct platform_device *pdev)
+ 	if (ret)
+ 		goto err_deconfig;
+ done:
++	/*
++	 * IPA v4.1 (SM8150): modem HWP init requires IPA clocks/registers
++	 * to remain accessible after probe.  Runtime suspend causes the
++	 * modem to watchdog (~10-15s) waiting for HWP indications.
++	 *
++	 * Additionally, explicitly initialize the IPA microcontroller (uc)
++	 * here on first boot so its INIT_COMPLETED response is captured
++	 * before the modem boots.  On IPA v4.1 with gsi-loader="self",
++	 * the uc firmware is loaded as part of ipa_fws.mdt via PIL and
++	 * boots independently.  Taking a power reference now (released
++	 * when the uc sends INIT_COMPLETED) ensures we don't miss the
++	 * uc ready signal -- the SSR notifier fires too late for first boot.
++	 */
++	if (data->version == IPA_VERSION_4_1) {
++		pm_runtime_forbid(dev);
++
++		/* Power up uc and wait for INIT_COMPLETED. */
++		ipa_uc_power(ipa);
++	}
++
+ 	(void)pm_runtime_put_autosuspend(dev);
+ 
+ 	return 0;
+@@ -983,6 +1003,9 @@ static void ipa_remove(struct platform_device *pdev)
+ 
+ 	ipa_deconfig(ipa);
+ out_power_put:
++	if (ipa->version == IPA_VERSION_4_1)
++		pm_runtime_allow(dev);
++
+ 	pm_runtime_put_noidle(dev);
+ 	ipa_smp2p_exit(ipa);
+ 	ipa_table_exit(ipa);
+diff --git a/drivers/net/ipa/ipa_power.c b/drivers/net/ipa/ipa_power.c
+index c572da9e9..bb3d8107d 100644
+--- a/drivers/net/ipa/ipa_power.c
++++ b/drivers/net/ipa/ipa_power.c
+@@ -7,6 +7,7 @@
+ #include <linux/clk.h>
+ #include <linux/device.h>
+ #include <linux/interconnect.h>
++#include <linux/of.h>
+ #include <linux/pm.h>
+ #include <linux/pm_runtime.h>
+ 
+@@ -270,7 +271,15 @@ ipa_power_init(struct device *dev, const struct ipa_power_data *data)
+ 	if (ret)
+ 		goto err_interconnect_exit;
+ 
+-	pm_runtime_set_autosuspend_delay(dev, IPA_AUTOSUSPEND_DELAY);
++	{
++		const struct ipa_data *ipa_data = of_device_get_match_data(dev);
++		unsigned int autosuspend_delay = IPA_AUTOSUSPEND_DELAY;
++
++		if (ipa_data && ipa_data->version == IPA_VERSION_4_1)
++			autosuspend_delay = INT_MAX;
++
++		pm_runtime_set_autosuspend_delay(dev, autosuspend_delay);
++	}
+ 	pm_runtime_use_autosuspend(dev);
+ 	pm_runtime_enable(dev);
+ 
+diff --git a/drivers/net/ipa/ipa_qmi.c b/drivers/net/ipa/ipa_qmi.c
+index d771f3a71..5d635ac43 100644
+--- a/drivers/net/ipa/ipa_qmi.c
++++ b/drivers/net/ipa/ipa_qmi.c
+@@ -11,7 +11,9 @@
+ #include "ipa.h"
+ #include "ipa_mem.h"
+ #include "ipa_modem.h"
++#include "ipa_power.h"
+ #include "ipa_qmi_msg.h"
++#include "ipa_version.h"
+ 
+ /**
+  * DOC: AP/Modem QMI Handshake
+@@ -142,6 +144,10 @@ static void ipa_qmi_ready(struct ipa_qmi *ipa_qmi)
+ 
+ 	/* We're ready.  Start up normal operation */
+ 	ipa = container_of(ipa_qmi, struct ipa, qmi);
++
++	if (ipa->version == IPA_VERSION_4_1)
++		ipa_power_retention(ipa, true);
++
+ 	ret = ipa_modem_start(ipa);
+ 	if (ret)
+ 		dev_err(ipa->dev, "error %d starting modem\n", ret);
+diff --git a/drivers/net/ipa/ipa_smp2p.c b/drivers/net/ipa/ipa_smp2p.c
+index 2f0ccdd93..0146c09eb 100644
+--- a/drivers/net/ipa/ipa_smp2p.c
++++ b/drivers/net/ipa/ipa_smp2p.c
+@@ -4,6 +4,7 @@
+  * Copyright (C) 2019-2024 Linaro Ltd.
+  */
+ 
++#include <linux/delay.h>
+ #include <linux/interrupt.h>
+ #include <linux/notifier.h>
+ #include <linux/panic_notifier.h>
+@@ -16,6 +17,7 @@
+ #include "ipa.h"
+ #include "ipa_smp2p.h"
+ #include "ipa_uc.h"
++#include "ipa_version.h"
+ 
+ /**
+  * DOC: IPA SMP2P communication with the modem
+@@ -109,9 +111,40 @@ static void ipa_smp2p_notify(struct ipa_smp2p *smp2p)
+ static irqreturn_t ipa_smp2p_modem_clk_query_isr(int irq, void *dev_id)
+ {
+ 	struct ipa_smp2p *smp2p = dev_id;
++	struct ipa *ipa = smp2p->ipa;
++	struct device *dev = ipa->dev;
++	bool woke = false;
++	int ret;
++
++	/* Wake IPA from runtime suspend before responding to modem HWP query */
++	if (pm_runtime_get_if_active(dev) <= 0) {
++		ret = pm_runtime_get_sync(dev);
++		if (ret < 0) {
++			dev_err(dev, "HWP: failed to wake IPA (%d)\n", ret);
++			return IRQ_HANDLED;
++		}
++		woke = true;
++	}
+ 
++	/* Wait for uc INIT_COMPLETED before modem accesses IPA registers */
++	if (!ipa->uc_loaded) {
++		int i;
++
++		for (i = 0; i < 50; i++) {
++			if (ipa->uc_loaded)
++				break;
++			udelay(10000);
++		}
++		if (!ipa->uc_loaded)
++			dev_warn(dev, "HWP: uc not ready, responding anyway\n");
++	}
++
++	smp2p->notified = false;
+ 	ipa_smp2p_notify(smp2p);
+ 
++	if (woke)
++		(void)pm_runtime_put_autosuspend(dev);
++
+ 	return IRQ_HANDLED;
+ }
+ 
+diff --git a/drivers/net/ipa/ipa_uc.c b/drivers/net/ipa/ipa_uc.c
+index dc7e92f2a..671136ac6 100644
+--- a/drivers/net/ipa/ipa_uc.c
++++ b/drivers/net/ipa/ipa_uc.c
+@@ -161,7 +161,13 @@ static void ipa_uc_response_hdlr(struct ipa *ipa)
+ 			(void)pm_runtime_put_autosuspend(dev);
+ 			ipa->uc_powered = false;
+ 		} else {
+-			dev_warn(dev, "unexpected init_completed response\n");
++			/*
++			 * Race on first boot with gsi-loader="self": uc may send
++			 * INIT_COMPLETED before ipa_uc_power() runs from probe.
++			 */
++			dev_info(dev, "uc init_completed (early, before power)\n");
++			ipa->uc_loaded = true;
++			ipa_power_retention(ipa, true);
+ 		}
+ 		break;
+ 	default:
 diff --git a/scripts/package/builddeb b/scripts/package/builddeb
 index 3627ca227..6623de337 100755
 --- a/scripts/package/builddeb
