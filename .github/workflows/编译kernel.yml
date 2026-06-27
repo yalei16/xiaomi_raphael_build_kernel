@@ -77,11 +77,29 @@ jobs:
         id: get-timestamp
         run: |
           echo "timestamp=$(TZ='Asia/Shanghai' date +'%Y-%m-%d %H:%M:%S')" >> $GITHUB_OUTPUT
-      
-      # 列出编译产物
-      - name: 列出编译产物
-        run: ls -la *.deb || true
-      
+
+      # ============================================================
+      # 新增：收集并重命名编译产物
+      # ============================================================
+      - name: 收集编译产物
+        run: |
+          echo "=== 查找所有 deb 包 ==="
+          find .. -name "*.deb" -type f
+          find . -name "*.deb" -type f
+          
+          # 从父目录复制 linux-image 和 linux-headers 到当前目录并重命名
+          # make bindeb-pkg 默认把包放在 ../
+          cp ../linux-image-*.deb ./linux-image-xiaomi-raphael.deb || echo "linux-image deb not found in ../"
+          cp ../linux-headers-*.deb ./linux-headers-xiaomi-raphael.deb || echo "linux-headers deb not found in ../"
+          
+          # 检查当前目录是否已有 firmware 和 alsa（脚本内生成）
+          # 如果没有，也尝试从其他位置复制
+          [ -f firmware-xiaomi-raphael.deb ] || cp ../firmware-xiaomi-raphael.deb ./firmware-xiaomi-raphael.deb || echo "firmware deb not found"
+          [ -f alsa-xiaomi-raphael.deb ] || cp ../alsa-xiaomi-raphael.deb ./alsa-xiaomi-raphael.deb || echo "alsa deb not found"
+          
+          echo "=== 最终产物 ==="
+          ls -la *.deb
+
       # 创建 GitHub Release 并上传编译产物
       - name: 创建 Release 并上传产物
         uses: softprops/action-gh-release@v2
