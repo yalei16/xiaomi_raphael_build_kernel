@@ -78,24 +78,27 @@ jobs:
         run: |
           echo "timestamp=$(TZ='Asia/Shanghai' date +'%Y-%m-%d %H:%M:%S')" >> $GITHUB_OUTPUT
 
-      # ============================================================
-      # 新增：收集并重命名编译产物
-      # ============================================================
+      # 收集编译产物
       - name: 收集编译产物
         run: |
           echo "=== 查找所有 deb 包 ==="
-          find .. -name "*.deb" -type f
-          find . -name "*.deb" -type f
+          find .. . -name "*.deb" -type f 2>/dev/null
           
-          # 从父目录复制 linux-image 和 linux-headers 到当前目录并重命名
-          # make bindeb-pkg 默认把包放在 ../
-          cp ../linux-image-*.deb ./linux-image-xiaomi-raphael.deb || echo "linux-image deb not found in ../"
-          cp ../linux-headers-*.deb ./linux-headers-xiaomi-raphael.deb || echo "linux-headers deb not found in ../"
+          # 脚本把包放在 output/ 目录
+          if [ -d "./output" ]; then
+            SRC_DIR="./output"
+          elif [ -d "../xiaomi_raphael_build_kernel/output" ]; then
+            SRC_DIR="../xiaomi_raphael_build_kernel/output"
+          else
+            echo "ERROR: output directory not found!"
+            exit 1
+          fi
           
-          # 检查当前目录是否已有 firmware 和 alsa（脚本内生成）
-          # 如果没有，也尝试从其他位置复制
-          [ -f firmware-xiaomi-raphael.deb ] || cp ../firmware-xiaomi-raphael.deb ./firmware-xiaomi-raphael.deb || echo "firmware deb not found"
-          [ -f alsa-xiaomi-raphael.deb ] || cp ../alsa-xiaomi-raphael.deb ./alsa-xiaomi-raphael.deb || echo "alsa deb not found"
+          echo "=== 从 $SRC_DIR 复制 ==="
+          cp "$SRC_DIR"/linux-image-xiaomi-raphael.deb ./
+          cp "$SRC_DIR"/linux-headers-xiaomi-raphael.deb ./
+          cp "$SRC_DIR"/firmware-xiaomi-raphael.deb ./
+          cp "$SRC_DIR"/alsa-xiaomi-raphael.deb ./
           
           echo "=== 最终产物 ==="
           ls -la *.deb
